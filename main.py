@@ -2,6 +2,7 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
 import pytesseract
+from pytesseract import Output  # THÊM DÒNG NÀY
 import io
 
 app = FastAPI(title="Tesseract OCR with Bounding Boxes")
@@ -18,7 +19,7 @@ async def ocr_with_boxes(file: UploadFile = File(...)):
             image,
             lang='vie',
             config='--oem 1 --psm 3',
-            output_type=pytesseract.Output.DATAFRAME
+            output_type=Output.DATAFRAME  # Sử dụng Output.DATAFRAME
         )
 
         # Lọc và xử lý: chỉ lấy từ (level=5), conf > 0, text không rỗng
