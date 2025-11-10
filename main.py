@@ -3,28 +3,30 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import pytesseract
 from PIL import Image
-from io import BytesIO  # RÕ RÀNG, GỌN
+from io import BytesIO
 
 app = FastAPI()
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    # allow_origins=["https://your-react-app.com"],  # Dùng cái này khi deploy thật
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Danh sách PSM hợp lệ
+VALID_PSM = {"3", "4", "6", "11", "12"}
+
 @app.post("/ocr")
 async def ocr(
     file: UploadFile = File(...),
-    lang: str = Form(None)  # Nhận từ frontend
+    lang: str = Form(None),
+    psm: str = Form("3")  # Mặc định là 3
 ):
     try:
         contents = await file.read()
-        image = Image.open(BytesIO(contents))  # Dùng BytesIO trực tiếp
+        image = Image.open(BytesIO(contents))
 
         # === XÁC ĐỊNH NGÔN NGỮ ===
         if lang and lang.lower() in ["vie", "jpn"]:
@@ -40,12 +42,18 @@ async def ocr(
             except:
                 ocr_lang = "vie"
 
+        # === XỬ LÝ PSM ===
+        if psm not in VALID_PSM:
+            psm = "3"  # Fallback an toàn
+
+        config = f'--oem 1 --psm {psm}'
+
         # === OCR ===
         data = pytesseract.image_to_data(
             image,
             lang=ocr_lang,
-            config='--oem 1 --psm 3',
-            output_type=pytesseract.Output.DICT  # Không cần import Output
+            config=config,
+            output_type=pytesseract.Output.DICT
         )
 
         results = []
@@ -62,12 +70,14 @@ async def ocr(
                     results.append({
                         "text": text,
                         "box": box,
-                        "lang": ocr_lang
+                        "lang": ocr_lang,
+                        "psm": psm  # Trả về để FE biết
                     })
 
         return {
             "success": True,
             "detected_lang": ocr_lang,
+            "used_psm": psm,
             "results": results
         }
 
