@@ -1,52 +1,78 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image
 import pytesseract
-from pytesseract import Output  # THÊM DÒNG NÀY
-import io
+from PIL import Image
+from io import BytesIO  # RÕ RÀNG, GỌN
 
-app = FastAPI(title="Tesseract OCR with Bounding Boxes")
+app = FastAPI()
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Cho phép mọi domain (dùng tạm)
+    allow_origins=["*"],
     # allow_origins=["https://your-react-app.com"],  # Dùng cái này khi deploy thật
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-@app.post("/ocr")
-async def ocr_with_boxes(file: UploadFile = File(...)):
-    try:
-        # Đọc ảnh
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents))
 
-        # Dùng pytesseract để lấy data dạng DataFrame (có bounding box)
+@app.post("/ocr")
+async def ocr(
+    file: UploadFile = File(...),
+    lang: str = Form(None)  # Nhận từ frontend
+):
+    try:
+        contents = await file.read()
+        image = Image.open(BytesIO(contents))  # Dùng BytesIO trực tiếp
+
+        # === XÁC ĐỊNH NGÔN NGỮ ===
+        if lang and lang.lower() in ["vie", "jpn"]:
+            ocr_lang = lang.lower()
+        else:
+            try:
+                osd = pytesseract.image_to_osd(image, output_type=pytesseract.Output.DICT)
+                script = osd.get("Script", "").lower()
+                if any(x in script for x in ["han", "hiragana", "katakana", "japanese"]):
+                    ocr_lang = "jpn"
+                else:
+                    ocr_lang = "vie"
+            except:
+                ocr_lang = "vie"
+
+        # === OCR ===
         data = pytesseract.image_to_data(
             image,
-            lang='vie',
+            lang=ocr_lang,
             config='--oem 1 --psm 3',
-            output_type=Output.DATAFRAME  # Sử dụng Output.DATAFRAME
+            output_type=pytesseract.Output.DICT  # Không cần import Output
         )
 
-        # Lọc và xử lý: chỉ lấy từ (level=5), conf > 0, text không rỗng
         results = []
-        for _, row in data.iterrows():
-            if int(row['level']) == 5 and float(row['conf']) > 0:
-                text = str(row['text']).strip()
+        for i in range(len(data["text"])):
+            if int(data["level"][i]) == 5 and float(data["conf"][i]) > 30:
+                text = data["text"][i].strip()
                 if text:
-                    x = row['left']
-                    y = row['top']
-                    w = row['width']
-                    h = row['height']
-                    box = [x, y, x + w, y + h]  # [x1, y1, x2, y2]
+                    box = [
+                        data["left"][i],
+                        data["top"][i],
+                        data["left"][i] + data["width"][i],
+                        data["top"][i] + data["height"][i]
+                    ]
                     results.append({
                         "text": text,
-                        "box": box
+                        "box": box,
+                        "lang": ocr_lang
                     })
 
-        return JSONResponse({"success": True, "results": results})
+        return {
+            "success": True,
+            "detected_lang": ocr_lang,
+            "results": results
+        }
 
     except Exception as e:
-        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
