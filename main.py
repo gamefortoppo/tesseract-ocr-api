@@ -1,12 +1,20 @@
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import pytesseract
 from pytesseract import Output  # THÊM DÒNG NÀY
 import io
 
 app = FastAPI(title="Tesseract OCR with Bounding Boxes")
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Cho phép mọi domain (dùng tạm)
+    # allow_origins=["https://your-react-app.com"],  # Dùng cái này khi deploy thật
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 @app.post("/ocr")
 async def ocr_with_boxes(file: UploadFile = File(...)):
     try:
