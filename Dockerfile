@@ -1,7 +1,8 @@
 FROM python:3.11-slim
 
-# Cài Tesseract + tiếng Việt
-RUN apt update && apt install -y tesseract-ocr tesseract-ocr-vie && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install -y tesseract-ocr tesseract-ocr-vie tesseract-ocr-jpn && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY requirements.txt .
